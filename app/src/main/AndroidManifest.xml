@@ -14,7 +14,19 @@
         tools:targetApi="31">
 
         <activity
-            android:name=".BracketDrawer"
+            android:name="com.example.bracketdrawer.BracketDrawer"
+            android:exported="true">
+        </activity>
+        <activity
+            android:name="com.example.bracketdrawer.BracketInit"
+            android:exported="true">
+        </activity>
+        <activity
+            android:name="com.example.bracketdrawer.BracketFill"
+            android:exported="true">
+        </activity>
+        <activity
+            android:name="com.example.bracketdrawer.BracketHome"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
