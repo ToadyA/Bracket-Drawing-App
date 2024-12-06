@@ -34,7 +34,9 @@ class BracketFill : Activity() {
             val participantNames = ArrayList<String>()
             for(i in 0 until participants){
                 val nameField = nameFieldsLayout?.getChildAt(i) as EditText
-                participantNames.add(nameField.text.toString())
+                val name = nameField.text.toString()
+                participantNames.add(name)
+                println("Paricipant $i: $name")
             }
 
             val intent = Intent(this@BracketFill, BracketDrawer::class.java)
