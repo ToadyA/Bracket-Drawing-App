@@ -9,6 +9,7 @@ import android.view.View
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 
+
 // The bracket is drawn and runs, is interactive, and can unfortunately not be saved.
 class BracketDrawer : AppCompatActivity(){
     private var namesStatus: TextView? = null
@@ -16,6 +17,8 @@ class BracketDrawer : AppCompatActivity(){
     private var bracketLayout: FrameLayout? = null
     private val participantButtons = mutableMapOf<Int, MutableList<Button>>()
     private val lineBoxes = mutableListOf<View>()
+    private lateinit var linesDrawer: LinesDrawer
+    private val lineIndices = mutableMapOf<String, Int>()
 
     override fun onCreate(savedInstanceState: Bundle?){
         super.onCreate(savedInstanceState)
@@ -27,6 +30,9 @@ class BracketDrawer : AppCompatActivity(){
 
         val participantNames = intent.getStringArrayListExtra("participantNames")
         val elimination = intent.getStringExtra("elimination") ?: "Single Elimination"
+        val linesDrawer = findViewById<LinesDrawer>(R.id.linesDrawer)
+
+        linesDrawer.addLine(50f, 100f, 200f, 300f)
 
         if (participantNames != null) {
             println("Calling placeParticipants")
@@ -54,50 +60,53 @@ class BracketDrawer : AppCompatActivity(){
             participantButtons[1]?.add(nameButton)
             topMargin += vertSpacing
         }
-
         bracketLayout?.post {
-            var round = 2
-            while (participantButtons[round - 1]?.size ?: 0 >= 2) {
-                participantButtons[round] = mutableListOf()
-                val previousRoundButtons = participantButtons[round - 1] ?: break
-                val numberOfPairs = previousRoundButtons.size / 2
+            nextRound(2, horOffset, vertSpacing)
+        }
+    }
 
-                for (i in 0 until numberOfPairs) {
-                    val button1 = previousRoundButtons[i * 2]
-                    val button2 = previousRoundButtons.getOrNull((i * 2) + 1)
+    private fun nextRound(round: Int, horOffset: Int, vertSpacing: Int){
+        println("and so begins round $round")
+        if(participantButtons[round - 1]?.size ?: 0 < 2) {
+            return
+        }
+        participantButtons[round] = mutableListOf()
+        val previousRoundButtons = participantButtons[round - 1] ?: return
+        val numberOfPairs = previousRoundButtons.size / 2
 
-                    if (button2 != null) {
-                        val midHeight = (button1.y + button2.y) / 2
-                        val additionalButton =
-                            createButton("", horOffset * round, midHeight.toInt())
-                        additionalButton.setOnClickListener {
-                            println("Button clicked in round $round")
-                            onRoundButtonClicked(additionalButton, round)
-                        }
-                        participantButtons[round]?.add(additionalButton)
-                        println("placeParticipants: about to call addLineBoxes for $button1 $button2 $additionalButton in round $round")
-                        addLineBoxes(button1, button2, additionalButton)
-                        println("placeParticipants: thus ends the call for addLineBoxes for $button1 $button2 $additionalButton in round $round")
-                    }
+        for (i in 0 until numberOfPairs) {
+            val button1 = previousRoundButtons[i * 2]
+            val button2 = previousRoundButtons.getOrNull((i * 2) + 1)
+            if (button2 != null) {
+                val midHeight = (button1.y + button2.y) / 2
+                val additionalButton = createButton("", horOffset * round, midHeight.toInt())
+                additionalButton.setOnClickListener {
+                    println("Button clicked in round $round")
+                    onRoundButtonClicked(additionalButton, round)
                 }
-
-                if (previousRoundButtons.size % 2 != 0) {
-                    val lastButton = previousRoundButtons.last()
-                    val additionalButton = createButton(
-                        lastButton.text.toString(),
-                        horOffset * round,
-                        lastButton.y.toInt()
-                    )
-                    additionalButton.setOnClickListener {
-                        println("Button clicked in round $round (odd)")
-                        onRoundButtonClicked(additionalButton, round)
-                    }
-                    participantButtons[round]?.add(additionalButton)
-                }
-                println("thus ends round $round")
-                round++
-                println("and so begins round $round")
+                participantButtons[round]?.add(additionalButton)
+                println("placeParticipants: about to call addLineBoxes for $button1 $button2 $additionalButton in round $round")
+                addLineBoxes(button1, button2, additionalButton)
+                println("placeParticipants: thus ends the call for addLineBoxes for $button1 $button2 $additionalButton in round $round")
             }
+        }
+
+        if (previousRoundButtons.size % 2 != 0) {
+            val lastButton = previousRoundButtons.last()
+            val additionalButton = createButton(
+                lastButton.text.toString(),
+                horOffset * round,
+                lastButton.y.toInt()
+            )
+            additionalButton.setOnClickListener {
+                println("Button clicked in round $round (odd)")
+                onRoundButtonClicked(additionalButton, round)
+            }
+            participantButtons[round]?.add(additionalButton)
+        }
+        println("thus ends round $round")
+        bracketLayout?.post {
+           nextRound(round + 1, horOffset, vertSpacing)
         }
     }
 
@@ -114,6 +123,18 @@ class BracketDrawer : AppCompatActivity(){
         button.layoutParams = buttonParams
         bracketLayout?.addView(button)
         return button
+    }
+
+    private fun addLines(button1: Button, button2: Button, linesDrawer: LinesDrawer){
+        val startX = (button1.left.toFloat() + (button1.width / 2))
+        val startY = (button1.top.toFloat() + (button1.height / 2))
+        val endX = (button2.left.toFloat() + (button2.width / 2))
+        val endY = (button2.top.toFloat() + (button2.height / 2))
+
+        linesDrawer.addLine(startX, startY, endX, endY)
+        val lineIndex = (linesDrawer.lines.size - 1)
+        lineIndices[button1.text.toString()] = lineIndex
+        lineIndices[button2.text.toString()] = lineIndex
     }
 
     private fun addLineBoxes(button1: Button, button2: Button, targetButton: Button){
@@ -153,6 +174,12 @@ class BracketDrawer : AppCompatActivity(){
         else{
             button.setBackgroundColor(Color.RED)
             updateNextRoundButton(name, round, true)
+        }
+
+        val lineIndex = lineIndices[name]
+        if(lineIndex != null){
+            val color2 = if(isRed) Color.GRAY else Color.RED
+            linesDrawer.updateLineColor(lineIndex, color2)
         }
     }
 

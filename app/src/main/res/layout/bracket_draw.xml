@@ -24,7 +24,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:orientation="vertical"
-                android:gravity="center"/>
+                android:gravity="center">
+
+                <com.example.bracketdrawer.LinesDrawer
+                    android:id="@+id/linesDrawer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"/>
+
+            </FrameLayout>
         </FrameLayout>
     </ScrollView>
 </HorizontalScrollView>
