@@ -5,10 +5,9 @@ import android.os.Bundle
 import android.widget.TextView
 import android.widget.FrameLayout
 import android.widget.Button
-import android.view.View
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-
+import android.view.ViewTreeObserver
 
 // The bracket is drawn and runs, is interactive, and can unfortunately not be saved.
 class BracketDrawer : AppCompatActivity(){
@@ -16,8 +15,9 @@ class BracketDrawer : AppCompatActivity(){
     private var eliminationStatus: TextView? = null
     private var bracketLayout: FrameLayout? = null
     private val participantButtons = mutableMapOf<Int, MutableList<Button>>()
-    private val lineBoxes = mutableListOf<View>()
-    private lateinit var linesDrawer: LinesDrawer
+    private val buttonPairs = mutableMapOf<Button, Pair<Button, Button>>()
+    private val buttonToTarget = mutableMapOf<Button, Button>()
+    private lateinit var lineDraw: LinesDrawer
     private val lineIndices = mutableMapOf<String, Int>()
 
     override fun onCreate(savedInstanceState: Bundle?){
@@ -27,12 +27,29 @@ class BracketDrawer : AppCompatActivity(){
         namesStatus = findViewById(R.id.namesStatus)
         eliminationStatus = findViewById(R.id.eliminationStatus)
         bracketLayout = findViewById(R.id.bracketLayout)
+        lineDraw = findViewById(R.id.linesDrawer)
 
         val participantNames = intent.getStringArrayListExtra("participantNames")
         val elimination = intent.getStringExtra("elimination") ?: "Single Elimination"
-        val linesDrawer = findViewById<LinesDrawer>(R.id.linesDrawer)
 
-        linesDrawer.addLine(50f, 100f, 200f, 300f)
+        if(lineDraw != null){
+            println("LineDrawer is initialized!")
+        }
+        else{
+            println("LineDrawer is not initialized.")
+        }
+        bracketLayout?.viewTreeObserver?.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener{
+            override fun onGlobalLayout(){
+                bracketLayout?.viewTreeObserver?.removeOnGlobalLayoutListener(this)
+
+                println("line1")
+                lineDraw.addLine(50f, 100f, 200f, 300f)
+                println("line2")
+                lineDraw.addLine(-50f, -100f, -200f, -300f)
+                println("line3")
+                lineDraw.addLine(-50f, -100f, 200f, 300f)
+            }
+        })
 
         if (participantNames != null) {
             println("Calling placeParticipants")
@@ -44,7 +61,7 @@ class BracketDrawer : AppCompatActivity(){
         println("placeParticipants answered.")
         bracketLayout?.removeAllViews()
         participantButtons.clear()
-        lineBoxes.clear()
+        buttonPairs.clear()
 
         val horOffset = 400
         val vertSpacing = 200
@@ -67,27 +84,30 @@ class BracketDrawer : AppCompatActivity(){
 
     private fun nextRound(round: Int, horOffset: Int, vertSpacing: Int){
         println("and so begins round $round")
-        if(participantButtons[round - 1]?.size ?: 0 < 2) {
+        if((participantButtons[round - 1]?.size ?: 0) < 2) {
             return
         }
         participantButtons[round] = mutableListOf()
         val previousRoundButtons = participantButtons[round - 1] ?: return
-        val numberOfPairs = previousRoundButtons.size / 2
+        val numberOfPairs = (previousRoundButtons.size / 2)
 
         for (i in 0 until numberOfPairs) {
             val button1 = previousRoundButtons[i * 2]
             val button2 = previousRoundButtons.getOrNull((i * 2) + 1)
             if (button2 != null) {
-                val midHeight = (button1.y + button2.y) / 2
+                val midHeight = ((button1.y + button2.y) / 2)
                 val additionalButton = createButton("", horOffset * round, midHeight.toInt())
                 additionalButton.setOnClickListener {
                     println("Button clicked in round $round")
                     onRoundButtonClicked(additionalButton, round)
                 }
                 participantButtons[round]?.add(additionalButton)
-                println("placeParticipants: about to call addLineBoxes for $button1 $button2 $additionalButton in round $round")
-                addLineBoxes(button1, button2, additionalButton)
-                println("placeParticipants: thus ends the call for addLineBoxes for $button1 $button2 $additionalButton in round $round")
+                buttonPairs[additionalButton] = Pair(button1, button2)
+                buttonToTarget[button1] = additionalButton
+                buttonToTarget[button2] = additionalButton
+                println("placeParticipants: about to call addLines for $button1 $button2 $additionalButton in round $round")
+                addLines(button1, button2, additionalButton)
+                println("placeParticipants: thus ends the call for addLines for $button1 $button2 $additionalButton in round $round")
             }
         }
 
@@ -103,10 +123,11 @@ class BracketDrawer : AppCompatActivity(){
                 onRoundButtonClicked(additionalButton, round)
             }
             participantButtons[round]?.add(additionalButton)
+            buttonToTarget[lastButton] = additionalButton
         }
         println("thus ends round $round")
         bracketLayout?.post {
-           nextRound(round + 1, horOffset, vertSpacing)
+           nextRound((round + 1), horOffset, vertSpacing)
         }
     }
 
@@ -125,85 +146,95 @@ class BracketDrawer : AppCompatActivity(){
         return button
     }
 
-    private fun addLines(button1: Button, button2: Button, linesDrawer: LinesDrawer){
-        val startX = (button1.left.toFloat() + (button1.width / 2))
-        val startY = (button1.top.toFloat() + (button1.height / 2))
-        val endX = (button2.left.toFloat() + (button2.width / 2))
-        val endY = (button2.top.toFloat() + (button2.height / 2))
+    private fun addLines(button1: Button, button2: Button, targetButton: Button){
+        targetButton.viewTreeObserver.addOnGlobalLayoutListener(object: ViewTreeObserver.OnGlobalLayoutListener{
+            override fun onGlobalLayout() {
+                targetButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
 
-        linesDrawer.addLine(startX, startY, endX, endY)
-        val lineIndex = (linesDrawer.lines.size - 1)
-        lineIndices[button1.text.toString()] = lineIndex
-        lineIndices[button2.text.toString()] = lineIndex
-    }
+                val startX1 = (button1.left.toFloat() + (button1.width / 2))
+                val startY1 = (button1.top.toFloat() + (button1.height / 2))
+                val startX2 = (button2.left.toFloat() + (button2.width / 2))
+                val startY2 = (button2.top.toFloat() + (button2.height / 2))
+                val endX = (targetButton.left.toFloat() + (targetButton.width / 2))
+                val endY = (targetButton.top.toFloat() + (targetButton.height / 2))
 
-    private fun addLineBoxes(button1: Button, button2: Button, targetButton: Button){
-        val midHeight = (button1.y + button2.y) / 2
-        println("addLineBoxes: Creating lineBox between (${button1.left},${button1.top}) and (${targetButton.left},$midHeight)")
-        val lineBox1 = createLineBox(button1.left, button1.top, targetButton.left, midHeight.toInt())
-        val lineBox2 = createLineBox(button2.left, button2.top, targetButton.left, midHeight.toInt()    )
-        lineBoxes.add(lineBox1)
-        lineBoxes.add(lineBox2)
-        println("ddLineBoxes: Done creating lineBox between (${button1.left},${button1.top}) and (${targetButton.left},$midHeight)")
-    }
+                println("drawing a line from ($startX1, $startY1) to ($endX, $endY)")
+                lineDraw.addLine(startX1, startY1, endX, endY)
+                println("drawing a line from ($startX2, $startY2 to ($endX, $endY)")
+                lineDraw.addLine(startX2, startY2, endX, endY)
 
-    private fun createLineBox(startX: Int, startY: Int, endX: Int, endY: Int): View{
-        println("createLineBox: Creating lineBox with startX: $startX, startY: $startY, endX: $endX, endY: $endY")
-        val lineBox = View(this)
-        lineBox.setBackgroundColor(Color.GRAY)
-        val lineBoxParams = FrameLayout.LayoutParams(
-            endX - startX,
-            10
-        )
-        lineBoxParams.setMargins(startX, ((startY + endY) / 2), 0, 0)
-        lineBox.layoutParams = lineBoxParams
-        bracketLayout?.addView(lineBox)
-        println("createLineBox: Created lineBox with startX: $startX, startY: $startY, endX: $endX, endY: $endY")
-        return lineBox
+                val lineIndex1 = (lineDraw.lines.size - 2)
+                val lineIndex2 = (lineDraw.lines.size - 1)
+
+                lineIndices[button1.text.toString()] = lineIndex1
+                lineIndices[button2.text.toString()] = lineIndex2
+            }
+        })
     }
 
     private fun onRoundButtonClicked(button: Button, round: Int){
         println("updateRoundButtonClicked called for round $round")
         val isRed = (button.background as? ColorDrawable)?.color == Color.RED
         val name = button.text.toString()
+        val linkedPair = buttonPairs.entries.find{it.value.first == button || it.value.second == button}
 
-        if (isRed){
-            button.setBackgroundColor(Color.GRAY)
-            updateNextRoundButton(name, round, false)
+        if(linkedPair != null){
+            val otherButton = if(linkedPair.value.first == button) linkedPair.value.second else linkedPair.value.first
+            if (isRed){
+                button.setBackgroundColor(Color.GRAY)
+                otherButton.isEnabled = true
+                updateNextRoundButton(button, name, round, false)
+            }
+            else{
+                button.setBackgroundColor(Color.RED)
+                otherButton.isEnabled = false
+                updateNextRoundButton(button, name, round, true)
+            }
         }
         else{
-            button.setBackgroundColor(Color.RED)
-            updateNextRoundButton(name, round, true)
+            if (isRed){
+                button.setBackgroundColor(Color.GRAY)
+                updateNextRoundButton(button, name, round, false)
+            }
+            else{
+                button.setBackgroundColor(Color.RED)
+                updateNextRoundButton(button, name, round, true)
+            }
         }
 
         val lineIndex = lineIndices[name]
         if(lineIndex != null){
             val color2 = if(isRed) Color.GRAY else Color.RED
-            linesDrawer.updateLineColor(lineIndex, color2)
+            lineDraw.updateLineColor(lineIndex, color2)
         }
     }
 
-    private fun updateNextRoundButton(name: String, round: Int, add: Boolean){
+    private fun updateNextRoundButton(button: Button, name: String, round: Int, add: Boolean){
         println("updateNextRoundButton called for round $round")
         val nextRoundButtons = participantButtons[round + 1] ?: return
-        val nextButton = nextRoundButtons.find { it.text.isEmpty() || it.text == name }
+        val nextButton = nextRoundButtons.find{it.text.isEmpty() || it.text == name}
+        val targetButton = buttonToTarget[button]
 
-        if (add) {
-            if (nextButton != null){
-                nextButton.text = name
-                nextButton.setBackgroundColor(Color.GRAY)
+        if(targetButton != null){
+            println("Target button for $name is $targetButton")
+            if(add){
+                targetButton.text = name
+                targetButton.setBackgroundColor(Color.GRAY)
+            }
+            else{
+                targetButton.text = ""
+                targetButton.setBackgroundColor(Color.LTGRAY)
             }
         }
         else{
-            nextButton?.text = ""
+            println("No target button found for $name")
         }
 
-        for (lineBox in lineBoxes){
-            if (lineBox.tag == name){
-                lineBox.setBackgroundColor(if (add) Color.RED else Color.GRAY)
-            }
+        if(add && nextButton != null){
+            updateNextRoundButton(nextButton, nextButton.text.toString(), (round + 1), true)
+        }
+        else if(!add && nextButton != null){
+            updateNextRoundButton(nextButton, nextButton.text.toString(), (round + 1), false)
         }
     }
 }
-
-
