@@ -18,8 +18,7 @@ class BracketFill : Activity() {
         setContentView(R.layout.bracket_fill)
 
         participants = intent.getIntExtra("participants", 0)
-        val elimination = intent.getStringExtra("elimination") ?: "Single Elimination"
-        nameFieldsLayout = findViewById<LinearLayout>(R.id.nameFieldsLayout)
+        nameFieldsLayout = findViewById(R.id.nameFieldsLayout)
         for (i in 0 until participants) {
             val nameField = EditText(this)
             nameField.hint = "Participant " + (i + 1)
@@ -41,7 +40,6 @@ class BracketFill : Activity() {
 
             val intent = Intent(this@BracketFill, BracketDrawer::class.java)
             intent.putExtra("participantNames", participantNames)
-            intent.putExtra("elimination", elimination)
             startActivity(intent)
         }
     }

@@ -1,5 +1,7 @@
 package com.example.bracketdrawer
 
+import android.app.AlertDialog
+import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.TextView
@@ -7,61 +9,53 @@ import android.widget.FrameLayout
 import android.widget.Button
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.view.ViewTreeObserver
+import android.text.InputType
+import android.widget.EditText
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
 
-// The bracket is drawn and runs, is interactive, and can unfortunately not be saved.
+// The bracket is drawn and runs, is interactive, and can be saved!
 class BracketDrawer : AppCompatActivity(){
     private var namesStatus: TextView? = null
-    private var eliminationStatus: TextView? = null
     private var bracketLayout: FrameLayout? = null
     private val participantButtons = mutableMapOf<Int, MutableList<Button>>()
     private val buttonPairs = mutableMapOf<Button, Pair<Button, Button>>()
     private val buttonToTarget = mutableMapOf<Button, Button>()
-    private lateinit var lineDraw: LinesDrawer
-    private val lineIndices = mutableMapOf<String, Int>()
+    private lateinit var saveButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?){
         super.onCreate(savedInstanceState)
         setContentView(R.layout.bracket_draw)
 
         namesStatus = findViewById(R.id.namesStatus)
-        eliminationStatus = findViewById(R.id.eliminationStatus)
         bracketLayout = findViewById(R.id.bracketLayout)
-        lineDraw = findViewById(R.id.linesDrawer)
+        saveButton = findViewById(R.id.saveButton)
+        saveButton.setOnClickListener{
+            showSaveDialog()
+        }
 
         val participantNames = intent.getStringArrayListExtra("participantNames")
-        val elimination = intent.getStringExtra("elimination") ?: "Single Elimination"
-
-        if(lineDraw != null){
-            println("LineDrawer is initialized!")
+        val bracketJson = intent.getStringExtra("savedBracket")
+        if (bracketJson != null) {
+            val gson = Gson()
+            val bracketType = object : TypeToken<BracketState>() {}.type
+            val savedBracket: BracketState = gson.fromJson(bracketJson, bracketType)
+            loadBracketState(savedBracket)
         }
-        else{
-            println("LineDrawer is not initialized.")
-        }
-        bracketLayout?.viewTreeObserver?.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener{
-            override fun onGlobalLayout(){
-                bracketLayout?.viewTreeObserver?.removeOnGlobalLayoutListener(this)
-
-                println("line1")
-                lineDraw.addLine(50f, 100f, 200f, 300f)
-                println("line2")
-                lineDraw.addLine(-50f, -100f, -200f, -300f)
-                println("line3")
-                lineDraw.addLine(-50f, -100f, 200f, 300f)
-            }
-        })
 
         if (participantNames != null) {
             println("Calling placeParticipants")
-            placeParticipants(participantNames, elimination)
+            placeParticipants(participantNames)
         }
     }
 
-    private fun placeParticipants(participantNames: ArrayList<String>, elimination: String) {
+    private fun placeParticipants(participantNames: ArrayList<String>) {
         println("placeParticipants answered.")
         bracketLayout?.removeAllViews()
         participantButtons.clear()
         buttonPairs.clear()
+        buttonToTarget.clear()
 
         val horOffset = 400
         val vertSpacing = 200
@@ -105,9 +99,6 @@ class BracketDrawer : AppCompatActivity(){
                 buttonPairs[additionalButton] = Pair(button1, button2)
                 buttonToTarget[button1] = additionalButton
                 buttonToTarget[button2] = additionalButton
-                println("placeParticipants: about to call addLines for $button1 $button2 $additionalButton in round $round")
-                addLines(button1, button2, additionalButton)
-                println("placeParticipants: thus ends the call for addLines for $button1 $button2 $additionalButton in round $round")
             }
         }
 
@@ -146,32 +137,6 @@ class BracketDrawer : AppCompatActivity(){
         return button
     }
 
-    private fun addLines(button1: Button, button2: Button, targetButton: Button){
-        targetButton.viewTreeObserver.addOnGlobalLayoutListener(object: ViewTreeObserver.OnGlobalLayoutListener{
-            override fun onGlobalLayout() {
-                targetButton.viewTreeObserver.removeOnGlobalLayoutListener(this)
-
-                val startX1 = (button1.left.toFloat() + (button1.width / 2))
-                val startY1 = (button1.top.toFloat() + (button1.height / 2))
-                val startX2 = (button2.left.toFloat() + (button2.width / 2))
-                val startY2 = (button2.top.toFloat() + (button2.height / 2))
-                val endX = (targetButton.left.toFloat() + (targetButton.width / 2))
-                val endY = (targetButton.top.toFloat() + (targetButton.height / 2))
-
-                println("drawing a line from ($startX1, $startY1) to ($endX, $endY)")
-                lineDraw.addLine(startX1, startY1, endX, endY)
-                println("drawing a line from ($startX2, $startY2 to ($endX, $endY)")
-                lineDraw.addLine(startX2, startY2, endX, endY)
-
-                val lineIndex1 = (lineDraw.lines.size - 2)
-                val lineIndex2 = (lineDraw.lines.size - 1)
-
-                lineIndices[button1.text.toString()] = lineIndex1
-                lineIndices[button2.text.toString()] = lineIndex2
-            }
-        })
-    }
-
     private fun onRoundButtonClicked(button: Button, round: Int){
         println("updateRoundButtonClicked called for round $round")
         val isRed = (button.background as? ColorDrawable)?.color == Color.RED
@@ -200,12 +165,6 @@ class BracketDrawer : AppCompatActivity(){
                 button.setBackgroundColor(Color.RED)
                 updateNextRoundButton(button, name, round, true)
             }
-        }
-
-        val lineIndex = lineIndices[name]
-        if(lineIndex != null){
-            val color2 = if(isRed) Color.GRAY else Color.RED
-            lineDraw.updateLineColor(lineIndex, color2)
         }
     }
 
@@ -237,4 +196,141 @@ class BracketDrawer : AppCompatActivity(){
             updateNextRoundButton(nextButton, nextButton.text.toString(), (round + 1), false)
         }
     }
+
+    private fun showSaveDialog(){
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Save Bracket")
+
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_TEXT
+        builder.setView(input)
+
+        builder.setPositiveButton("Save"){ dialog, _ ->
+            val bracketName = input.text.toString()
+            saveBracketState(bracketName)
+            dialog.dismiss()
+        }
+        builder.setNegativeButton("Cancel"){ dialog, _ -> dialog.cancel()}
+
+        builder.show()
+    }
+
+    private fun saveBracketState(name: String){
+        val buttonStateMap = participantButtons.mapValues{ entry ->
+            entry.value.map{ button ->
+                ButtonState(
+                    button.text.toString(),
+                    (button.background as? ColorDrawable)?.color ?: Color.GRAY,
+                    button.isEnabled
+                )
+            }
+        }
+        val buttonPairsMap = buttonPairs.mapKeys { entry ->
+            ButtonState(
+                entry.key.text.toString(),
+                (entry.key.background as? ColorDrawable)?.color ?: Color.GRAY,
+                entry.key.isEnabled
+            )
+        }.mapValues { entry ->
+            Pair(
+                ButtonState(
+                    entry.value.first.text.toString(),
+                    (entry.value.first.background as? ColorDrawable)?.color ?: Color.GRAY,
+                    entry.value.first.isEnabled
+                ),
+                ButtonState(
+                    entry.value.second.text.toString(),
+                    (entry.value.second.background as? ColorDrawable)?.color ?: Color.GRAY,
+                    entry.value.second.isEnabled
+                )
+            )
+        }
+        val buttonToTargetMap = buttonToTarget.mapKeys { entry ->
+            ButtonState(
+                entry.key.text.toString(),
+                (entry.key.background as? ColorDrawable)?.color ?: Color.GRAY,
+                entry.key.isEnabled
+            )
+        }.mapValues { entry ->
+            ButtonState(
+                entry.value.text.toString(),
+                (entry.value.background as? ColorDrawable)?.color ?: Color.GRAY,
+                entry.value.isEnabled
+            )
+        }
+        val bracketState = BracketState(
+            name,
+            buttonStateMap,
+            buttonPairsMap,
+            buttonToTargetMap
+        )
+
+        saveToStorage(bracketState)
+        val intent = Intent(this, BracketHome::class.java)
+        startActivity(intent)
+    }
+
+    private fun saveToStorage(bracketState: BracketState){
+        val sharedPreferences = getSharedPreferences("bracket_storage", MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        val gson = GsonBuilder()
+            .registerTypeAdapter(ButtonState::class.java, ButtonStateAdapter())
+            .create()
+        val json = gson.toJson(bracketState)
+        editor.putString(bracketState.name, json)
+        editor.apply()
+    }
+
+    private fun loadBracketState(bracketState: BracketState){
+        participantButtons.clear()
+        bracketState.participantButtons.forEach { (key, value) ->
+            participantButtons[key] = value.map { buttonState ->
+                Button(this).apply{
+                    text = buttonState.text
+                    setBackgroundColor(buttonState.color)
+                    isEnabled = buttonState.isEnabled
+                    bracketLayout?.addView(this)
+                }
+            }.toMutableList()
+        }
+
+        buttonPairs.clear()
+        bracketState.buttonPairs.forEach { (key, value) ->
+            val buttonKey = findButtonByState(participantButtons, key)
+            val pair = Pair(
+                findButtonByState(participantButtons, value.first),
+                findButtonByState(participantButtons, value.second)
+            )
+            if(buttonKey != null && pair.first != null && pair.second != null){
+                buttonPairs[buttonKey] = pair as Pair<Button, Button>
+            }
+        }
+
+        buttonToTarget.clear()
+        bracketState.buttonToTarget.forEach { (key, value) ->
+            val buttonKey = findButtonByState(participantButtons, key)
+            val targetButton = findButtonByState(participantButtons, value)
+            if(buttonKey != null && targetButton != null){
+                buttonToTarget[buttonKey] = targetButton
+            }
+        }
+
+        for(round in participantButtons.values){
+            for(button in round){
+                bracketLayout?.addView(button)
+            }
+        }
+    }
+
+    private fun findButtonByState(participantButtons: Map<Int, MutableList<Button>>, buttonState: ButtonState): Button? {
+        participantButtons.values.flatten().forEach{ button ->
+            if(button.text == buttonState.text &&
+                (button.background as? ColorDrawable)?.color == buttonState.color &&
+                button.isEnabled == buttonState.isEnabled){
+                return button
+            }
+        }
+        return null
+    }
+
 }
